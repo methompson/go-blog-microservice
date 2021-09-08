@@ -13,3 +13,21 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# logs
+*.log
+
+# Environment Variables
+.env
+.env.bak
+
+# Test files
+testFiles
+.DS_Store
+
+# IDE stuff
+.vscode
+
+# NPM Stuff
+node_modules
+package-lock.json
