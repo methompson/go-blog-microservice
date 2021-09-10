@@ -5,8 +5,9 @@ import (
 )
 
 type UserDataDocument struct {
-	Id   string
-	Name string
+	Id     string
+	UserId string
+	Name   string
 }
 
 type BlogDocument struct {

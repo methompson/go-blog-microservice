@@ -7,14 +7,16 @@ import (
 )
 
 type UserDocResult struct {
-	Id   string `bson:"_id"`
-	Name string `bson:"name"`
+	Id     string `bson:"_id"`
+	UserId string `bson:"userId"`
+	Name   string `bson:"name"`
 }
 
 func (udr *UserDocResult) GetUserDataDoc() *dbController.UserDataDocument {
 	doc := dbController.UserDataDocument{
-		Id:   udr.Id,
-		Name: udr.Name,
+		Id:     udr.Id,
+		UserId: udr.UserId,
+		Name:   udr.Name,
 	}
 
 	return &doc
