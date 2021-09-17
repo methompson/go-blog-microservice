@@ -163,3 +163,7 @@ func (srv *BlogServer) GetTokenAndRoleFromHeader(ctx *gin.Context) (*auth.Token,
 
 	return token, role, nil
 }
+
+func (srv *BlogServer) CanEditBlog(role string) bool {
+	return role == constants.USER_ADMIN || role == constants.USER_EDITOR
+}

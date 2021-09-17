@@ -217,28 +217,41 @@ func (mdbc *MongoDbController) DeleteUserData(id string) error {
 	return errors.New("Unimplemented")
 }
 
-func (mdbc *MongoDbController) AddBlogPost(doc *dbController.BlogDocument) error {
+func (mdbc *MongoDbController) AddBlogPost(doc *dbController.AddBlogDocument) (string, error) {
 	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
 	defer cancel()
 
-	print("Adding Blog Post\n")
+	dateAdded := primitive.Timestamp{T: uint32(doc.DateAdded.Unix())}
 
-	insert := bson.D{
-		{Key: "title", Value: doc.Title},
-		{Key: "slug", Value: doc.Slug},
-		{Key: "body", Value: doc.Body},
-		{Key: "tags", Value: doc.Tags},
-		{Key: "authorId", Value: doc.AuthorId},
-		{Key: "dateAdded", Value: primitive.Timestamp{T: uint32(doc.DateAdded.Unix())}},
-		{Key: "updateAuthorId", Value: doc.UpdateAuthorId},
-		{Key: "dateUpdated", Value: primitive.Timestamp{T: uint32(doc.DateAdded.Unix())}},
+	insert := bson.M{
+		"title":     doc.Title,
+		"slug":      doc.Slug,
+		"body":      doc.Body,
+		"authorId":  doc.AuthorId,
+		"dateAdded": dateAdded,
 	}
 
-	_, mdbErr := collection.InsertOne(backCtx, insert)
+	if doc.Tags != nil {
+		insert["tags"] = *doc.Tags
+	}
+
+	if doc.UpdateAuthorId != nil {
+		insert["updateAuthorId"] = *doc.UpdateAuthorId
+	} else {
+		insert["updateAuthorId"] = doc.AuthorId
+	}
+
+	if doc.DateUpdated != nil {
+		insert["dateUpdated"] = primitive.Timestamp{T: uint32((*doc.DateUpdated).Unix())}
+	} else {
+		insert["dateUpdated"] = dateAdded
+	}
+
+	insertResult, mdbErr := collection.InsertOne(backCtx, insert)
 
 	if mdbErr != nil {
 		err := mdbErr.Error()
-		print("Add blog error Error: " + err + "\n")
+		print("Add blog error. Error: " + err + "\n")
 
 		if strings.Contains(err, "duplicate key error") {
 			msg := "Duplicate blog post."
@@ -246,13 +259,19 @@ func (mdbc *MongoDbController) AddBlogPost(doc *dbController.BlogDocument) error
 				msg = msg + " Blog Post with slug '" + doc.Slug + "' already exists."
 			}
 
-			return dbController.NewDuplicateEntryError(msg)
+			return "", dbController.NewDuplicateEntryError(msg)
 		}
 
-		return dbController.NewDBError(mdbErr.Error())
+		return "", dbController.NewDBError(mdbErr.Error())
 	}
 
-	return nil
+	objectId, idOk := insertResult.InsertedID.(primitive.ObjectID)
+
+	if !idOk {
+		return "", dbController.NewDBError("invalid id returned by database")
+	}
+
+	return objectId.Hex(), nil
 }
 
 func (mdbc *MongoDbController) GetBlogPostById(id string) (*dbController.BlogDocument, error) {
@@ -263,11 +282,83 @@ func (mdbc *MongoDbController) GetBlogPostBySlug(slug string) (*dbController.Blo
 	return nil, errors.New("Unimplemented")
 }
 
-func (mdbc *MongoDbController) EditBlogPost(doc *dbController.BlogDocument) error {
-	return errors.New("Unimplemented")
+func (mdbc *MongoDbController) EditBlogPost(doc *dbController.EditBlogDocument) error {
+	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	defer cancel()
+
+	print("Editing Blog Post\n")
+
+	id, idErr := primitive.ObjectIDFromHex(doc.Id)
+	if idErr != nil {
+		return dbController.NewInvalidInputError("Invalid User ID")
+	}
+
+	filter := bson.M{"_id": id}
+
+	values := bson.M{}
+
+	if doc.Title != nil {
+		values["title"] = *doc.Title
+	}
+
+	if doc.Slug != nil {
+		values["slug"] = *doc.Slug
+	}
+
+	if doc.Body != nil {
+		values["body"] = *doc.Body
+	}
+
+	if doc.Tags != nil {
+		values["tags"] = *doc.Tags
+	}
+
+	if doc.AuthorId != nil {
+		values["authorId"] = *doc.AuthorId
+	}
+
+	if doc.DateUpdated != nil {
+		values["dateAdded"] = primitive.Timestamp{T: uint32((*doc.DateAdded).Unix())}
+	}
+
+	if doc.UpdateAuthorId != nil {
+		values["updateAuthorId"] = doc.UpdateAuthorId
+	}
+
+	if doc.DateUpdated != nil {
+		values["dateUpdated"] = primitive.Timestamp{T: uint32((*doc.DateUpdated).Unix())}
+	}
+
+	update := bson.M{
+		"$set": values,
+	}
+
+	result, mdbErr := collection.UpdateOne(backCtx, filter, update)
+
+	if mdbErr != nil {
+		err := mdbErr.Error()
+		print("Edit blog error. Error: " + err + "\n")
+
+		if strings.Contains(err, "duplicate key error") {
+			msg := "Duplicate blog post."
+			if strings.Contains(err, "slug") {
+				msg = msg + " Blog Post with slug '" + *doc.Slug + "' already exists."
+			}
+
+			return dbController.NewDuplicateEntryError(msg)
+		}
+
+		return dbController.NewDBError(mdbErr.Error())
+	}
+
+	if result.MatchedCount == 0 {
+		return dbController.NewInvalidInputError("id did not match any blog posts")
+	}
+
+	return nil
 }
 
-func (mdbc *MongoDbController) DeleteBlogPost(id string) error {
+func (mdbc *MongoDbController) DeleteBlogPost(doc *dbController.DeleteBlogDocument) error {
 	return errors.New("Unimplemented")
 }
 
