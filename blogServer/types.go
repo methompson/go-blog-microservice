@@ -1,10 +1,16 @@
 package blogServer
 
 import (
+	"os"
 	"time"
 
+	"methompson.com/blog-microservice/blogServer/constants"
 	"methompson.com/blog-microservice/blogServer/dbController"
 )
+
+func DebugMode() bool {
+	return os.Getenv(constants.GIN_MODE) != "release"
+}
 
 type AuthorizationHeader struct {
 	Token string `header:"authorization" binding:"required"`

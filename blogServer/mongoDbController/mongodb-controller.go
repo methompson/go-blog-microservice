@@ -32,51 +32,6 @@ func (mdbc *MongoDbController) getCollection(collectionName string) (*mongo.Coll
 	return collection, backCtx, cancel
 }
 
-func (mdbc *MongoDbController) initUserCollection(dbName string) error {
-	db := mdbc.MongoClient.Database(dbName)
-
-	jsonSchema := bson.M{
-		"bsonType": "object",
-		"required": []string{"userId"},
-		"properties": bson.M{
-			"userId": bson.M{
-				"bsonType":    "string",
-				"description": "userId must be a string",
-			},
-			"name": bson.M{
-				"bsonType":    "string",
-				"description": "name must be a string",
-			},
-		},
-	}
-
-	colOpts := options.CreateCollection().SetValidator(bson.M{"$jsonSchema": jsonSchema})
-
-	createCollectionErr := db.CreateCollection(context.TODO(), "users", colOpts)
-
-	if createCollectionErr != nil {
-		return dbController.NewDBError(createCollectionErr.Error())
-	}
-
-	models := []mongo.IndexModel{
-		{
-			Keys:    bson.D{{Key: "userId", Value: 1}},
-			Options: options.Index().SetUnique(true),
-		},
-	}
-
-	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
-
-	collection, _, _ := mdbc.getCollection("users")
-	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
-
-	if setIndexErr != nil {
-		return dbController.NewDBError(setIndexErr.Error())
-	}
-
-	return nil
-}
-
 func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 	db := mdbc.MongoClient.Database(dbName)
 
@@ -180,12 +135,6 @@ func (mdbc *MongoDbController) initLoggingCollection(dbName string) error {
 }
 
 func (mdbc *MongoDbController) InitDatabase() error {
-	userCreationErr := mdbc.initUserCollection(mdbc.dbName)
-
-	if userCreationErr != nil && !strings.Contains(userCreationErr.Error(), "Collection already exists") {
-		return userCreationErr
-	}
-
 	blogCreationErr := mdbc.initBlogCollection(mdbc.dbName)
 
 	if blogCreationErr != nil && !strings.Contains(blogCreationErr.Error(), "Collection already exists") {
@@ -199,22 +148,6 @@ func (mdbc *MongoDbController) InitDatabase() error {
 	}
 
 	return nil
-}
-
-func (mdbc *MongoDbController) AddUserData(data *dbController.UserDataDocument) error {
-	return errors.New("Unimplemented")
-}
-
-func (mdbc *MongoDbController) GetUserDataById(id string) (*dbController.UserDataDocument, error) {
-	return nil, errors.New("Unimplemented")
-}
-
-func (mdbc *MongoDbController) EditUserData(data *dbController.UserDataDocument) error {
-	return errors.New("Unimplemented")
-}
-
-func (mdbc *MongoDbController) DeleteUserData(id string) error {
-	return errors.New("Unimplemented")
 }
 
 func (mdbc *MongoDbController) AddBlogPost(doc *dbController.AddBlogDocument) (string, error) {
@@ -275,11 +208,83 @@ func (mdbc *MongoDbController) AddBlogPost(doc *dbController.AddBlogDocument) (s
 }
 
 func (mdbc *MongoDbController) GetBlogPostById(id string) (*dbController.BlogDocument, error) {
-	return nil, errors.New("Unimplemented")
+	idObj, idObjErr := primitive.ObjectIDFromHex(id)
+
+	if idObjErr != nil {
+		return nil, dbController.NewInvalidInputError("invalid id")
+	}
+
+	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	defer cancel()
+
+	var result BlogDocResult
+	mdbErr := collection.FindOne(backCtx, bson.D{
+		{Key: "_id", Value: idObj},
+	}).Decode(&result)
+
+	if mdbErr != nil {
+		var err error
+		if strings.Contains(mdbErr.Error(), "no documents in result") {
+			err = dbController.NewNoResultsError("")
+		} else {
+			err = dbController.NewDBError("error getting data from database: " + mdbErr.Error())
+		}
+
+		return nil, err
+	}
+
+	return result.GetBlogDocument(), nil
 }
 
 func (mdbc *MongoDbController) GetBlogPostBySlug(slug string) (*dbController.BlogDocument, error) {
-	return nil, errors.New("Unimplemented")
+	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	defer cancel()
+
+	var result BlogDocResult
+	mdbErr := collection.FindOne(backCtx, bson.D{
+		{Key: "slug", Value: slug},
+	}).Decode(&result)
+
+	if mdbErr != nil {
+		var err error
+		if strings.Contains(mdbErr.Error(), "no documents in result") {
+			err = dbController.NewNoResultsError("")
+		} else {
+			err = dbController.NewDBError("error getting data from database: " + mdbErr.Error())
+		}
+
+		return nil, err
+	}
+
+	return result.GetBlogDocument(), nil
+}
+
+func (mdbc *MongoDbController) GetBlogPosts(page int, pagination int) ([]*dbController.BlogDocument, error) {
+	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	defer cancel()
+
+	opt := options.Find().SetSort(bson.M{"dateAdded": -1}).SetLimit(int64(pagination)).SetSkip(int64((page - 1) * pagination))
+
+	cursor, findErr := collection.Find(backCtx, bson.D{}, opt)
+
+	if findErr != nil {
+		return nil, dbController.NewDBError("")
+	}
+
+	var results []BlogDocResult
+	// var results []bson.M
+
+	if err := cursor.All(context.TODO(), &results); err != nil {
+		// log.Fatal(err)
+		return nil, errors.New("error parsing results")
+	}
+
+	var posts []*dbController.BlogDocument = []*dbController.BlogDocument{}
+	for _, v := range results {
+		posts = append(posts, v.GetBlogDocument())
+	}
+
+	return posts, nil
 }
 
 func (mdbc *MongoDbController) EditBlogPost(doc *dbController.EditBlogDocument) error {
@@ -359,13 +364,75 @@ func (mdbc *MongoDbController) EditBlogPost(doc *dbController.EditBlogDocument) 
 }
 
 func (mdbc *MongoDbController) DeleteBlogPost(doc *dbController.DeleteBlogDocument) error {
-	return errors.New("Unimplemented")
+	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	defer cancel()
+
+	print("Deleting Blog Post\n")
+
+	id, idErr := primitive.ObjectIDFromHex(doc.Id)
+	if idErr != nil {
+		return dbController.NewInvalidInputError("Invalid User ID")
+	}
+
+	delResult, delErr := collection.DeleteOne(
+		backCtx,
+		bson.M{
+			"_id": id,
+		},
+	)
+
+	if delResult.DeletedCount == 0 {
+		return dbController.NewInvalidInputError("invalid id. no blog posts deleted")
+	}
+
+	if delErr != nil {
+		return dbController.NewDBError(delErr.Error())
+	}
+
+	return nil
 }
 
 func (mdbc *MongoDbController) AddRequestLog(log *logging.RequestLogData) error {
-	return errors.New("Unimplemented")
+	collection, backCtx, cancel := mdbc.getCollection("logging")
+	defer cancel()
+
+	insert := bson.D{
+		{Key: "timestamp", Value: primitive.Timestamp{T: uint32(log.Timestamp.Unix())}},
+		{Key: "type", Value: log.Type},
+		{Key: "clientIP", Value: log.ClientIP},
+		{Key: "method", Value: log.Method},
+		{Key: "path", Value: log.Path},
+		{Key: "protocol", Value: log.Protocol},
+		{Key: "statusCode", Value: log.StatusCode},
+		{Key: "latency", Value: log.Latency},
+		{Key: "userAgent", Value: log.UserAgent},
+		{Key: "errorMessage", Value: log.ErrorMessage},
+	}
+
+	_, mdbErr := collection.InsertOne(backCtx, insert)
+
+	if mdbErr != nil {
+		return dbController.NewDBError(mdbErr.Error())
+	}
+
+	return nil
 }
 
 func (mdbc *MongoDbController) AddInfoLog(log *logging.InfoLogData) error {
-	return errors.New("Unimplemented")
+	collection, backCtx, cancel := mdbc.getCollection("logging")
+	defer cancel()
+
+	insert := bson.D{
+		{Key: "timestamp", Value: primitive.Timestamp{T: uint32(log.Timestamp.Unix())}},
+		{Key: "type", Value: log.Type},
+		{Key: "message", Value: log.Message},
+	}
+
+	_, mdbErr := collection.InsertOne(backCtx, insert)
+
+	if mdbErr != nil {
+		return dbController.NewDBError(mdbErr.Error())
+	}
+
+	return nil
 }

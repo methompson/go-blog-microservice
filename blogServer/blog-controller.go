@@ -1,6 +1,7 @@
 package blogServer
 
 import (
+	"github.com/gosimple/slug"
 	"methompson.com/blog-microservice/blogServer/dbController"
 	"methompson.com/blog-microservice/blogServer/logging"
 )
@@ -42,8 +43,23 @@ func (bc *BlogController) AddBlogPost(blogBody AddBlogBody) (id string, err erro
 	return addBlogId, nil
 }
 
-func (bc *BlogController) GetBlogPostById()   {}
-func (bc *BlogController) GetBlogPostBySlug() {}
+func (bc *BlogController) GetBlogPostById(id string) (*dbController.BlogDocument, error) {
+	return (*bc.DBController).GetBlogPostById(id)
+}
+
+func (bc *BlogController) GetBlogPostBySlug(slug string) (*dbController.BlogDocument, error) {
+	return (*bc.DBController).GetBlogPostBySlug(slug)
+}
+
+func (bc *BlogController) GetBlogPosts(page int, pagination int) ([]*dbController.BlogDocument, error) {
+	_pagination := pagination
+
+	if _pagination <= 0 {
+		_pagination = 10
+	}
+
+	return (*bc.DBController).GetBlogPosts(page, _pagination)
+}
 
 // TODO Check that the data is valid (e.g. the slug)
 func (bc *BlogController) EditBlogPost(body EditBlogBody) error {
@@ -67,14 +83,14 @@ func (bc *BlogController) DeleteBlogPost(body DeleteBlogBody) error {
 	return (*bc.DBController).DeleteBlogPost(blogDocument)
 }
 
-func (bc *BlogController) AddLogger()     {}
-func (bc *BlogController) AddRequestLog() {}
-func (bc *BlogController) AddInfoLog()    {}
-
-func (bc *BlogController) isValidSlug(slug string) bool {
-	return true
+func (bc *BlogController) AddLogger(logger *logging.BlogLogger) {
+	bc.Loggers = append(bc.Loggers, logger)
 }
 
-func (bc *BlogController) slugify(slug string) string {
-	return slug
+func (bc *BlogController) isValidSlug(_slug string) bool {
+	return slug.IsSlug(_slug)
+}
+
+func (bc *BlogController) slugify(_slug string) string {
+	return slug.Make(_slug)
 }

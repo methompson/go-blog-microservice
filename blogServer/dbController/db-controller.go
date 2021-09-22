@@ -7,14 +7,10 @@ import (
 type DatabaseController interface {
 	InitDatabase() error
 
-	AddUserData(data *UserDataDocument) error
-	GetUserDataById(id string) (*UserDataDocument, error)
-	EditUserData(data *UserDataDocument) error
-	DeleteUserData(id string) error
-
 	AddBlogPost(doc *AddBlogDocument) (id string, err error)
 	GetBlogPostById(id string) (*BlogDocument, error)
 	GetBlogPostBySlug(slug string) (*BlogDocument, error)
+	GetBlogPosts(page int, pagination int) ([]*BlogDocument, error)
 	EditBlogPost(doc *EditBlogDocument) error
 	DeleteBlogPost(doc *DeleteBlogDocument) error
 
