@@ -31,3 +31,11 @@ testFiles
 # NPM Stuff
 node_modules
 package-lock.json
+
+docker-run.sh
+
+# Compiled Binary for the name of the project
+bin/
+blog-microservice.tar
+
+firebase.json

@@ -135,7 +135,7 @@ func makeServer() (*BlogServer, error) {
 	// First we assign the pointer-to MongoDbController of mongoDbController to
 	// a variable of type DatabaseController. Then we get the pointer-to
 	// DatabaseController and assign that to cont. We can use pointer-to
-	// DatabaseController to run InitController to initialize the AuthController.
+	// DatabaseController to run InitController to initialize the BlogController.
 	var passedController dbController.DatabaseController = mdbController
 	ptrToCont := &passedController
 
@@ -149,7 +149,11 @@ func makeServer() (*BlogServer, error) {
 }
 
 func makeFirebaseApp() (*firebase.App, error) {
-	sa := option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+	if len(os.Getenv(constants.GOOGLE_APPLICATION_CREDENTIALS)) == 0 {
+		log.Fatal("No Google Application credential path listed")
+	}
+
+	sa := option.WithCredentialsFile(os.Getenv(constants.GOOGLE_APPLICATION_CREDENTIALS))
 	app, err := firebase.NewApp(context.Background(), nil, sa)
 
 	if err != nil {
