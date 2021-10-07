@@ -284,6 +284,7 @@ func (mdbc *MongoDbController) GetAggregationStages() (projectStage, authorLooku
 			Key: "$project", Value: bson.M{
 				"body":           1,
 				"slug":           1,
+				"title":          1,
 				"authorId":       1,
 				"updateAuthorId": 1,
 				"dateAdded":      1,
