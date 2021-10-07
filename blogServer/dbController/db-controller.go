@@ -2,6 +2,7 @@ package dbController
 
 import (
 	"methompson.com/blog-microservice/blogServer/logging"
+	"methompson.com/blog-microservice/blogServer/user"
 )
 
 type DatabaseController interface {
@@ -13,6 +14,8 @@ type DatabaseController interface {
 	GetBlogPosts(page int, pagination int) ([]*BlogDocument, error)
 	EditBlogPost(doc *EditBlogDocument) error
 	DeleteBlogPost(doc *DeleteBlogDocument) error
+
+	AddUserInformation(info *user.UserInformation) error
 
 	AddRequestLog(log *logging.RequestLogData) error
 	AddInfoLog(log *logging.InfoLogData) error

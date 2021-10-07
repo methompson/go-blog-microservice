@@ -44,6 +44,7 @@ func MakeAndStartServer() {
 			}
 		}
 		addLogging(blogServer)
+		addCorsMiddleware(blogServer)
 
 		addRecovery(blogServer)
 	}
@@ -111,17 +112,29 @@ func addRecovery(bs *BlogServer) {
 	}))
 }
 
-func makeServer() (*BlogServer, error) {
+func makeAndInitDatabase() (*mongoDbController.MongoDbController, error) {
 	mdbController, mdbControllerErr := mongoDbController.MakeMongoDbController(constants.BLOG_DB_NAME)
 
 	if mdbControllerErr != nil {
-		log.Fatal(mdbControllerErr.Error())
+		// log.Fatal(mdbControllerErr.Error())
+		return nil, mdbControllerErr
 	}
 
 	initDbErr := mdbController.InitDatabase()
 
 	if initDbErr != nil {
-		log.Fatal("Error Initializing Database: ", initDbErr.Error())
+		// log.Fatal("Error Initializing Database: ", initDbErr.Error())
+		return nil, initDbErr
+	}
+
+	return mdbController, nil
+}
+
+func makeServer() (*BlogServer, error) {
+	mdbController, mdbControllerErr := makeAndInitDatabase()
+
+	if mdbControllerErr != nil {
+		log.Fatal("Error Initializing Database: ", mdbControllerErr.Error())
 	}
 
 	app, err := makeFirebaseApp()
@@ -166,7 +179,9 @@ func makeFirebaseApp() (*firebase.App, error) {
 func makeGinEngine() *gin.Engine {
 	// We run this prior to creating a server. Any gin engine created prior
 	// to running SetMode won't include this configuration.
-	if !DebugMode() {
+	if DebugMode() {
+		gin.SetMode(gin.DebugMode)
+	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -200,6 +215,23 @@ func addLogging(as *BlogServer) {
 
 		return ""
 	}))
+}
+
+func addCorsMiddleware(as *BlogServer) {
+	as.GinEngine.Use(
+		func(ctx *gin.Context) {
+			ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+			ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+			ctx.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+
+			if ctx.Request.Method == "OPTIONS" {
+				ctx.AbortWithStatus(204)
+			} else {
+				ctx.Next()
+			}
+		},
+	)
 }
 
 // TODO check environment variables

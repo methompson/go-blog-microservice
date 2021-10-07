@@ -4,6 +4,7 @@ import (
 	"github.com/gosimple/slug"
 	"methompson.com/blog-microservice/blogServer/dbController"
 	"methompson.com/blog-microservice/blogServer/logging"
+	"methompson.com/blog-microservice/blogServer/user"
 )
 
 type BlogController struct {
@@ -22,8 +23,14 @@ func InitController(dbc *dbController.DatabaseController) BlogController {
 	return bc
 }
 
-func (bc *BlogController) AddUserData()     {}
-func (bc *BlogController) GetUserData()     {}
+func (bc *BlogController) AddUserData(userInfo *user.UserInformation) {}
+
+func (bc *BlogController) GetUserData() *user.UserInformation {
+	ui := user.UserInformation{}
+
+	return &ui
+}
+
 func (bc *BlogController) EditUserData()    {}
 func (bc *BlogController) DeletedUserData() {}
 

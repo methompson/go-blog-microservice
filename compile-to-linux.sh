@@ -1,3 +1,3 @@
 rm -rf ./docker/bin
 mkdir docker/bin
-env GOOS=linux go build -o ./docker/bin/blog-microservice
+env GOOS=linux go build -v -o ./docker/bin/blog-microservice

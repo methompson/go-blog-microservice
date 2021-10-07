@@ -5,9 +5,11 @@ import (
 )
 
 type UserDataDocument struct {
-	Id     string
-	UserId string
-	Name   string
+	Id    string
+	UID   string
+	Name  string
+	Role  string
+	Email string
 }
 
 type AddBlogDocument struct {
@@ -27,8 +29,10 @@ type BlogDocument struct {
 	Slug           string
 	Body           string
 	Tags           []string
+	Author         string
 	AuthorId       string
 	DateAdded      time.Time
+	UpdateAuthor   string
 	UpdateAuthorId string
 	DateUpdated    time.Time
 }
@@ -41,11 +45,18 @@ func (bd *BlogDocument) GetMap() *map[string]interface{} {
 	m["title"] = bd.Title
 	m["slug"] = bd.Slug
 	m["body"] = bd.Body
-	m["tags"] = bd.Tags
+	m["author"] = bd.Author
 	m["authorId"] = bd.AuthorId
 	m["dateAdded"] = bd.DateAdded.Unix()
+	m["updateAuthor"] = bd.UpdateAuthor
 	m["updateAuthorId"] = bd.UpdateAuthorId
 	m["dateUpdated"] = bd.DateUpdated.Unix()
+
+	if bd.Tags != nil {
+		m["tags"] = bd.Tags
+	} else {
+		m["tags"] = make([]string, 0)
+	}
 
 	return &m
 }

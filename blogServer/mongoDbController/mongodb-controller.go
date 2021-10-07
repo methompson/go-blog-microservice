@@ -13,7 +13,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"methompson.com/blog-microservice/blogServer/dbController"
 	"methompson.com/blog-microservice/blogServer/logging"
+	"methompson.com/blog-microservice/blogServer/user"
 )
+
+const BLOG_COLLECTION = "blogPosts"
+const LOGGING_COLLECTION = "logging"
+const USER_COLLECTION = "users"
 
 type MongoDbController struct {
 	MongoClient *mongo.Client
@@ -41,7 +46,7 @@ func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 		"properties": bson.M{
 			"title": bson.M{
 				"bsonType":    "string",
-				"description": "titlr must be a string",
+				"description": "title must be a string",
 			},
 			"slug": bson.M{
 				"bsonType":    "string",
@@ -49,7 +54,7 @@ func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 			},
 			"body": bson.M{
 				"bsonType":    "string",
-				"description": "slug must be a string",
+				"description": "body must be a string",
 			},
 			"tags": bson.M{
 				"bsonType":    "array",
@@ -74,11 +79,9 @@ func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 		},
 	}
 
-	collectionName := "blogPosts"
-
 	colOpts := options.CreateCollection().SetValidator(bson.M{"$jsonSchema": jsonSchema})
 
-	createCollectionErr := db.CreateCollection(context.TODO(), collectionName, colOpts)
+	createCollectionErr := db.CreateCollection(context.TODO(), BLOG_COLLECTION, colOpts)
 
 	if createCollectionErr != nil {
 		return dbController.NewDBError(createCollectionErr.Error())
@@ -86,14 +89,76 @@ func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 
 	models := []mongo.IndexModel{
 		{
-			Keys:    bson.D{{Key: "slug", Value: 1}},
+			Keys:    bson.M{"slug": 1},
 			Options: options.Index().SetUnique(true),
 		},
 	}
 
 	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
 
-	collection, _, _ := mdbc.getCollection(collectionName)
+	collection, _, _ := mdbc.getCollection(BLOG_COLLECTION)
+	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
+
+	if setIndexErr != nil {
+		return dbController.NewDBError(setIndexErr.Error())
+	}
+
+	return nil
+}
+
+func (mdbc *MongoDbController) initUserCollection(dbName string) error {
+	db := mdbc.MongoClient.Database(dbName)
+
+	jsonSchema := bson.M{
+		"bsonType": "object",
+		// "required": []string{"uid"},
+		"required": []string{"uid", "name", "email", "active", "role"},
+		"properties": bson.M{
+			"uid": bson.M{
+				"bsonType":    "string",
+				"description": "uid must be a string",
+			},
+			"name": bson.M{
+				"bsonType":    "string",
+				"description": "name must be a string",
+			},
+			"email": bson.M{
+				"bsonType":    "string",
+				"description": "email must be a string",
+			},
+			"active": bson.M{
+				"bsonType":    "bool",
+				"description": "active must be a bool",
+			},
+			"role": bson.M{
+				"bsonType":    "string",
+				"description": "role must be a string",
+			},
+		},
+	}
+
+	colOpts := options.CreateCollection().SetValidator(bson.M{"$jsonSchema": jsonSchema})
+
+	createCollectionErr := db.CreateCollection(context.TODO(), USER_COLLECTION, colOpts)
+
+	if createCollectionErr != nil {
+		return dbController.NewDBError(createCollectionErr.Error())
+	}
+
+	models := []mongo.IndexModel{
+		{
+			Keys:    bson.M{"uid": 1},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys:    bson.M{"email": 1},
+			Options: options.Index().SetUnique(true),
+		},
+	}
+
+	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
+
+	collection, _, _ := mdbc.getCollection(USER_COLLECTION)
 	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
 
 	if setIndexErr != nil {
@@ -125,7 +190,7 @@ func (mdbc *MongoDbController) initLoggingCollection(dbName string) error {
 	colOpts.SetCapped(true)
 	colOpts.SetSizeInBytes(100000)
 
-	createCollectionErr := db.CreateCollection(context.TODO(), "logging", colOpts)
+	createCollectionErr := db.CreateCollection(context.TODO(), LOGGING_COLLECTION, colOpts)
 
 	if createCollectionErr != nil {
 		return dbController.NewDBError(createCollectionErr.Error())
@@ -141,6 +206,12 @@ func (mdbc *MongoDbController) InitDatabase() error {
 		return blogCreationErr
 	}
 
+	userCreationErr := mdbc.initUserCollection(mdbc.dbName)
+
+	if userCreationErr != nil && !strings.Contains(userCreationErr.Error(), "Collection already exists") {
+		return userCreationErr
+	}
+
 	loggingCreationErr := mdbc.initLoggingCollection(mdbc.dbName)
 
 	if loggingCreationErr != nil && !strings.Contains(loggingCreationErr.Error(), "Collection already exists") {
@@ -151,7 +222,7 @@ func (mdbc *MongoDbController) InitDatabase() error {
 }
 
 func (mdbc *MongoDbController) AddBlogPost(doc *dbController.AddBlogDocument) (string, error) {
-	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	collection, backCtx, cancel := mdbc.getCollection(BLOG_COLLECTION)
 	defer cancel()
 
 	dateAdded := primitive.Timestamp{T: uint32(doc.DateAdded.Unix())}
@@ -207,6 +278,81 @@ func (mdbc *MongoDbController) AddBlogPost(doc *dbController.AddBlogDocument) (s
 	return objectId.Hex(), nil
 }
 
+func (mdbc *MongoDbController) GetAggregationStages() (projectStage, authorLookupStage, updateAuthorLookupStage *bson.D) {
+	ps := bson.D{
+		{
+			Key: "$project", Value: bson.M{
+				"body":           1,
+				"slug":           1,
+				"authorId":       1,
+				"updateAuthorId": 1,
+				"dateAdded":      1,
+				"dateUpdated":    1,
+				"tags":           1,
+			},
+		},
+	}
+
+	als := bson.D{{
+		Key: "$lookup",
+		Value: bson.M{
+			"from":         USER_COLLECTION,
+			"localField":   "authorId",
+			"foreignField": "uid",
+			"as":           "author",
+		},
+	}}
+
+	uals := bson.D{{
+		Key: "$lookup",
+		Value: bson.M{
+			"from":         USER_COLLECTION,
+			"localField":   "updateAuthorId",
+			"foreignField": "uid",
+			"as":           "updateAuthor",
+		},
+	}}
+
+	return &ps, &als, &uals
+}
+
+func (mdbc *MongoDbController) GetBlogPostWithMatcher(matchStage *bson.D) (*dbController.BlogDocument, error) {
+	collection, backCtx, cancel := mdbc.getCollection(BLOG_COLLECTION)
+	defer cancel()
+
+	projectStage, authorLookupStage, updateAuthorLookupStage := mdbc.GetAggregationStages()
+
+	limitStage := bson.D{{
+		Key:   "$limit",
+		Value: int32(1),
+	}}
+
+	cursor, aggErr := collection.Aggregate(backCtx, mongo.Pipeline{
+		*matchStage,
+		*projectStage,
+		limitStage,
+		*authorLookupStage,
+		*updateAuthorLookupStage,
+	})
+
+	if aggErr != nil {
+		return nil, dbController.NewDBError("error getting data from database: " + aggErr.Error())
+	}
+
+	var results []BlogDocResult
+	if allErr := cursor.All(backCtx, &results); allErr != nil {
+		return nil, dbController.NewDBError("error parsing results: " + allErr.Error())
+	}
+
+	if len(results) < 1 {
+		return nil, dbController.NewNoResultsError("")
+	}
+
+	var post *dbController.BlogDocument = results[0].GetBlogDocument()
+
+	return post, nil
+}
+
 func (mdbc *MongoDbController) GetBlogPostById(id string) (*dbController.BlogDocument, error) {
 	idObj, idObjErr := primitive.ObjectIDFromHex(id)
 
@@ -214,68 +360,62 @@ func (mdbc *MongoDbController) GetBlogPostById(id string) (*dbController.BlogDoc
 		return nil, dbController.NewInvalidInputError("invalid id")
 	}
 
-	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
-	defer cancel()
+	matchStage := bson.D{{Key: "$match", Value: bson.M{
+		"_id": idObj,
+	}}}
 
-	var result BlogDocResult
-	mdbErr := collection.FindOne(backCtx, bson.D{
-		{Key: "_id", Value: idObj},
-	}).Decode(&result)
-
-	if mdbErr != nil {
-		var err error
-		if strings.Contains(mdbErr.Error(), "no documents in result") {
-			err = dbController.NewNoResultsError("")
-		} else {
-			err = dbController.NewDBError("error getting data from database: " + mdbErr.Error())
-		}
-
-		return nil, err
-	}
-
-	return result.GetBlogDocument(), nil
+	return mdbc.GetBlogPostWithMatcher(&matchStage)
 }
 
 func (mdbc *MongoDbController) GetBlogPostBySlug(slug string) (*dbController.BlogDocument, error) {
-	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
-	defer cancel()
+	matchStage := bson.D{{Key: "$match", Value: bson.M{
+		"slug": slug,
+	}}}
 
-	var result BlogDocResult
-	mdbErr := collection.FindOne(backCtx, bson.D{
-		{Key: "slug", Value: slug},
-	}).Decode(&result)
-
-	if mdbErr != nil {
-		var err error
-		if strings.Contains(mdbErr.Error(), "no documents in result") {
-			err = dbController.NewNoResultsError("")
-		} else {
-			err = dbController.NewDBError("error getting data from database: " + mdbErr.Error())
-		}
-
-		return nil, err
-	}
-
-	return result.GetBlogDocument(), nil
+	return mdbc.GetBlogPostWithMatcher(&matchStage)
 }
 
 func (mdbc *MongoDbController) GetBlogPosts(page int, pagination int) ([]*dbController.BlogDocument, error) {
-	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	collection, backCtx, cancel := mdbc.getCollection(BLOG_COLLECTION)
 	defer cancel()
 
-	opt := options.Find().SetSort(bson.M{"dateAdded": -1}).SetLimit(int64(pagination)).SetSkip(int64((page - 1) * pagination))
+	matchStage := bson.D{{Key: "$match", Value: bson.M{}}}
 
-	cursor, findErr := collection.Find(backCtx, bson.D{}, opt)
+	projectStage, authorLookupStage, updateAuthorLookupStage := mdbc.GetAggregationStages()
 
-	if findErr != nil {
+	sortStage := bson.D{{
+		Key: "$sort",
+		Value: bson.M{
+			"dateAdded": -1,
+		},
+	}}
+
+	limitStage := bson.D{{
+		Key:   "$limit",
+		Value: int32(pagination),
+	}}
+
+	skipStage := bson.D{{
+		Key:   "$skip",
+		Value: int64((page - 1) * pagination),
+	}}
+
+	cursor, aggErr := collection.Aggregate(backCtx, mongo.Pipeline{
+		matchStage,
+		*projectStage,
+		sortStage,
+		skipStage,
+		limitStage,
+		*authorLookupStage,
+		*updateAuthorLookupStage,
+	})
+
+	if aggErr != nil {
 		return nil, dbController.NewDBError("")
 	}
 
 	var results []BlogDocResult
-	// var results []bson.M
-
-	if err := cursor.All(context.TODO(), &results); err != nil {
-		// log.Fatal(err)
+	if allErr := cursor.All(backCtx, &results); allErr != nil {
 		return nil, errors.New("error parsing results")
 	}
 
@@ -288,7 +428,7 @@ func (mdbc *MongoDbController) GetBlogPosts(page int, pagination int) ([]*dbCont
 }
 
 func (mdbc *MongoDbController) EditBlogPost(doc *dbController.EditBlogDocument) error {
-	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	collection, backCtx, cancel := mdbc.getCollection(BLOG_COLLECTION)
 	defer cancel()
 
 	print("Editing Blog Post\n")
@@ -364,7 +504,7 @@ func (mdbc *MongoDbController) EditBlogPost(doc *dbController.EditBlogDocument) 
 }
 
 func (mdbc *MongoDbController) DeleteBlogPost(doc *dbController.DeleteBlogDocument) error {
-	collection, backCtx, cancel := mdbc.getCollection("blogPosts")
+	collection, backCtx, cancel := mdbc.getCollection(BLOG_COLLECTION)
 	defer cancel()
 
 	print("Deleting Blog Post\n")
@@ -392,21 +532,52 @@ func (mdbc *MongoDbController) DeleteBlogPost(doc *dbController.DeleteBlogDocume
 	return nil
 }
 
-func (mdbc *MongoDbController) AddRequestLog(log *logging.RequestLogData) error {
-	collection, backCtx, cancel := mdbc.getCollection("logging")
+func (mdbc *MongoDbController) AddUserInformation(info *user.UserInformation) error {
+	collection, backCtx, cancel := mdbc.getCollection(USER_COLLECTION)
 	defer cancel()
 
-	insert := bson.D{
-		{Key: "timestamp", Value: primitive.Timestamp{T: uint32(log.Timestamp.Unix())}},
-		{Key: "type", Value: log.Type},
-		{Key: "clientIP", Value: log.ClientIP},
-		{Key: "method", Value: log.Method},
-		{Key: "path", Value: log.Path},
-		{Key: "protocol", Value: log.Protocol},
-		{Key: "statusCode", Value: log.StatusCode},
-		{Key: "latency", Value: log.Latency},
-		{Key: "userAgent", Value: log.UserAgent},
-		{Key: "errorMessage", Value: log.ErrorMessage},
+	update := bson.M{
+		"$set": bson.M{
+			"uid":    info.Uid,
+			"name":   info.Name,
+			"email":  info.Email,
+			"active": info.Active,
+			"role":   info.Role.String(),
+		},
+	}
+
+	opts := options.Update().SetUpsert(true)
+
+	filter := bson.M{}
+
+	updateResult, mdbErr := collection.UpdateOne(backCtx, filter, update, opts)
+
+	if mdbErr != nil {
+		return mdbErr
+	}
+
+	if updateResult.MatchedCount == 0 && updateResult.UpsertedCount == 0 {
+		return dbController.NewInvalidInputError("id did not match any blog posts")
+	}
+
+	return nil
+}
+
+func (mdbc *MongoDbController) AddRequestLog(log *logging.RequestLogData) error {
+	collection, backCtx, cancel := mdbc.getCollection(LOGGING_COLLECTION)
+	defer cancel()
+
+	insert := bson.M{
+		"timestamp":    primitive.Timestamp{T: uint32(log.Timestamp.Unix())},
+		"type":         log.Type,
+		"clientIP":     log.ClientIP,
+		"method":       log.Method,
+		"path":         log.Path,
+		"protocol":     log.Protocol,
+		"statusCode":   log.StatusCode,
+		"latency":      log.Latency,
+		"userAgent":    log.UserAgent,
+		"errorMessage": log.ErrorMessage,
 	}
 
 	_, mdbErr := collection.InsertOne(backCtx, insert)
@@ -419,13 +590,13 @@ func (mdbc *MongoDbController) AddRequestLog(log *logging.RequestLogData) error 
 }
 
 func (mdbc *MongoDbController) AddInfoLog(log *logging.InfoLogData) error {
-	collection, backCtx, cancel := mdbc.getCollection("logging")
+	collection, backCtx, cancel := mdbc.getCollection(LOGGING_COLLECTION)
 	defer cancel()
 
-	insert := bson.D{
-		{Key: "timestamp", Value: primitive.Timestamp{T: uint32(log.Timestamp.Unix())}},
-		{Key: "type", Value: log.Type},
-		{Key: "message", Value: log.Message},
+	insert := bson.M{
+		"timestamp": primitive.Timestamp{T: uint32(log.Timestamp.Unix())},
+		"type":      log.Type,
+		"message":   log.Message,
 	}
 
 	_, mdbErr := collection.InsertOne(backCtx, insert)

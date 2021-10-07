@@ -11,8 +11,6 @@ import (
 )
 
 func (srv *BlogServer) SetRoutes() {
-	srv.GinEngine.GET("/", srv.GetHome)
-
 	srv.GinEngine.GET("/blog", srv.GetBlogPostsByFirstPage)
 	srv.GinEngine.GET("/blog/page/:page", srv.GetBlogPostsByPage)
 	srv.GinEngine.GET("/blog/id/:id", srv.GetBlogPostById)
@@ -21,25 +19,6 @@ func (srv *BlogServer) SetRoutes() {
 	srv.GinEngine.POST("/add-blog-post", srv.PostAddBlogPost)
 	srv.GinEngine.POST("/edit-blog-post", srv.PostEditBlogPost)
 	srv.GinEngine.POST("/delete-blog-post", srv.PostDeleteBlogPost)
-}
-
-func (srv *BlogServer) GetHome(ctx *gin.Context) {
-	token, role, err := srv.GetTokenAndRoleFromHeader(ctx)
-
-	// No Token Error
-	if err != nil {
-		fmt.Println(err)
-		ctx.JSON(
-			http.StatusUnauthorized,
-			gin.H{"error": "Not Authorized"},
-		)
-		return
-	}
-
-	fmt.Printf("Verified ID Token: %v\n", token)
-	fmt.Println("User's role: ", role)
-
-	ctx.Data(http.StatusOK, "text/html; charset=utf-8", make([]byte, 0))
 }
 
 func (srv *BlogServer) GetBlogPostsByPage(ctx *gin.Context) {
@@ -97,9 +76,15 @@ func (srv *BlogServer) GetBlogPosts(ctx *gin.Context, page int) {
 		return
 	}
 
+	output := make([]map[string]interface{}, 0)
+
+	for _, val := range posts {
+		output = append(output, *val.GetMap())
+	}
+
 	ctx.JSON(
 		http.StatusOK,
-		posts,
+		output,
 	)
 }
 
