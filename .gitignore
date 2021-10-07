@@ -36,6 +36,7 @@ docker-run.sh
 
 # Compiled Binary for the name of the project
 bin/
+blog-microservice
 blog-microservice.tar
 
 firebase.json
