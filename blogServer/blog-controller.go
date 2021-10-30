@@ -34,7 +34,7 @@ func (bc *BlogController) GetUserData() *user.UserInformation {
 func (bc *BlogController) EditUserData()    {}
 func (bc *BlogController) DeletedUserData() {}
 
-func (bc *BlogController) AddBlogPost(blogBody AddBlogBody) (id string, err error) {
+func (bc *BlogController) AddBlogPost(blogBody AddBlogBody) (id string, slug string, err error) {
 	blogDocument := blogBody.GetBlogDocument()
 
 	if !bc.isValidSlug(blogDocument.Slug) {
@@ -44,10 +44,10 @@ func (bc *BlogController) AddBlogPost(blogBody AddBlogBody) (id string, err erro
 	addBlogId, addBlogErr := (*bc.DBController).AddBlogPost(blogDocument)
 
 	if addBlogErr != nil {
-		return "", addBlogErr
+		return "", "", addBlogErr
 	}
 
-	return addBlogId, nil
+	return addBlogId, blogDocument.Slug, nil
 }
 
 func (bc *BlogController) GetBlogPostById(id string) (*dbController.BlogDocument, error) {

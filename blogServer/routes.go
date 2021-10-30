@@ -186,7 +186,7 @@ func (srv *BlogServer) PostAddBlogPost(ctx *gin.Context) {
 		return
 	}
 
-	id, addBlogErr := srv.BlogController.AddBlogPost(body)
+	id, slug, addBlogErr := srv.BlogController.AddBlogPost(body)
 
 	if addBlogErr != nil {
 		switch addBlogErr.(type) {
@@ -207,7 +207,8 @@ func (srv *BlogServer) PostAddBlogPost(ctx *gin.Context) {
 	ctx.JSON(
 		http.StatusOK,
 		gin.H{
-			"id": id,
+			"id":   id,
+			"slug": slug,
 		},
 	)
 }
