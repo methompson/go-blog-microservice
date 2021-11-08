@@ -192,8 +192,8 @@ func makeGinEngine() *gin.Engine {
 	return gin.Default()
 }
 
-func addLogging(as *BlogServer) {
-	as.GinEngine.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+func addLogging(bs *BlogServer) {
+	bs.GinEngine.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		// address := authUtils.GetRemoteAddressIP(param.Request.RemoteAddr)
 		requestData := logging.RequestLogData{
 			Timestamp:    param.TimeStamp,
@@ -208,7 +208,7 @@ func addLogging(as *BlogServer) {
 			ErrorMessage: param.ErrorMessage,
 		}
 
-		for _, logger := range as.BlogController.Loggers {
+		for _, logger := range bs.BlogController.Loggers {
 			l := *logger
 			l.AddRequestLog(&requestData)
 		}
@@ -217,8 +217,8 @@ func addLogging(as *BlogServer) {
 	}))
 }
 
-func addCorsMiddleware(as *BlogServer) {
-	as.GinEngine.Use(
+func addCorsMiddleware(bs *BlogServer) {
+	bs.GinEngine.Use(
 		func(ctx *gin.Context) {
 			ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 			ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")

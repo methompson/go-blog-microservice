@@ -26,7 +26,7 @@ func (srv *BlogServer) GetBlogPostsByPage(ctx *gin.Context) {
 
 	// Not sure this will ever happen
 	if len(page) == 0 {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{
 				"error": "invalid page number",
@@ -39,7 +39,7 @@ func (srv *BlogServer) GetBlogPostsByPage(ctx *gin.Context) {
 	pageNum, pageNumErr := strconv.Atoi(page)
 
 	if pageNumErr != nil {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{
 				"error": "invalid page number",
@@ -67,7 +67,7 @@ func (srv *BlogServer) GetBlogPosts(ctx *gin.Context, page int) {
 	posts, getPostsErr := srv.BlogController.GetBlogPosts(page, paginationNum)
 
 	if getPostsErr != nil {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{
 				"error": "error retrieving blog posts",
@@ -93,7 +93,7 @@ func (srv *BlogServer) GetBlogPostById(ctx *gin.Context) {
 
 	// Not sure this will ever happen
 	if len(id) == 0 {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{
 				"error": "invalid id",
@@ -108,12 +108,12 @@ func (srv *BlogServer) GetBlogPostById(ctx *gin.Context) {
 	if getBlogErr != nil {
 		switch getBlogErr.(type) {
 		case dbController.NoResultsError:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusNotFound,
 				gin.H{"error": "page does not exist"},
 			)
 		default:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": getBlogErr.Error()},
 			)
@@ -133,7 +133,7 @@ func (srv *BlogServer) GetBlogPostBySlug(ctx *gin.Context) {
 
 	// Not sure this will ever happen
 	if len(slug) == 0 {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{
 				"error": "invalid slug",
@@ -148,12 +148,12 @@ func (srv *BlogServer) GetBlogPostBySlug(ctx *gin.Context) {
 	if getBlogErr != nil {
 		switch getBlogErr.(type) {
 		case dbController.NoResultsError:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusNotFound,
 				gin.H{"error": "page does not exist"},
 			)
 		default:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": getBlogErr.Error()},
 			)
@@ -179,7 +179,7 @@ func (srv *BlogServer) PostAddBlogPost(ctx *gin.Context) {
 	var body AddBlogBody
 
 	if bindJsonErr := ctx.ShouldBindJSON(&body); bindJsonErr != nil {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{"error": "missing required values"},
 		)
@@ -191,12 +191,12 @@ func (srv *BlogServer) PostAddBlogPost(ctx *gin.Context) {
 	if addBlogErr != nil {
 		switch addBlogErr.(type) {
 		case dbController.DuplicateEntryError:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": "Slug Already Exists"},
 			)
 		default:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": "error adding blog"},
 			)
@@ -223,7 +223,7 @@ func (srv *BlogServer) PostEditBlogPost(ctx *gin.Context) {
 	var body EditBlogBody
 
 	if bindJsonErr := ctx.ShouldBindJSON(&body); bindJsonErr != nil {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{"error": "missing required values"},
 		)
@@ -235,12 +235,12 @@ func (srv *BlogServer) PostEditBlogPost(ctx *gin.Context) {
 	if editBlogErr != nil {
 		switch editBlogErr.(type) {
 		case dbController.DuplicateEntryError:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": "Slug Already Exists"},
 			)
 		default:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": "error adding blog"},
 			)
@@ -261,7 +261,7 @@ func (srv *BlogServer) PostDeleteBlogPost(ctx *gin.Context) {
 	var body DeleteBlogBody
 
 	if bindJsonErr := ctx.ShouldBindJSON(&body); bindJsonErr != nil {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{"error": "missing required values"},
 		)
@@ -273,12 +273,12 @@ func (srv *BlogServer) PostDeleteBlogPost(ctx *gin.Context) {
 	if deleteBlogErr != nil {
 		switch deleteBlogErr.(type) {
 		case dbController.InvalidInputError:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": "invalid id. blog does not exist. no blog post deleted"},
 			)
 		default:
-			ctx.JSON(
+			ctx.AbortWithStatusJSON(
 				http.StatusBadRequest,
 				gin.H{"error": "error deleting blog"},
 			)
@@ -295,7 +295,7 @@ func (srv *BlogServer) standardAuthHandler(ctx *gin.Context) error {
 	// No Token Error
 	if getTokenErr != nil {
 		fmt.Println(getTokenErr)
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusUnauthorized,
 			gin.H{"error": "invalid token"},
 		)
@@ -304,7 +304,7 @@ func (srv *BlogServer) standardAuthHandler(ctx *gin.Context) error {
 
 	// Role Error
 	if !srv.CanEditBlog(role) {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusUnauthorized,
 			gin.H{"error": "not authorized"},
 		)
